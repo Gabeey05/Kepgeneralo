@@ -10,6 +10,7 @@ interface GenerateImageRequest {
   prompt: string;
   aspectRatio: string;
   safetyTolerance?: number;
+  seed?: number;
 }
 
 interface ReplicateResponse {
@@ -73,7 +74,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { prompt, aspectRatio, safetyTolerance } =
+    const { prompt, aspectRatio, safetyTolerance, seed } =
       (await req.json()) as GenerateImageRequest;
 
     if (!prompt || !aspectRatio) {
@@ -93,6 +94,17 @@ Deno.serve(async (req: Request) => {
 
     const { width, height } = getAspectRatioSize(aspectRatio);
 
+    const input: Record<string, unknown> = {
+      prompt,
+      aspect_ratio: aspectRatio,
+      num_outputs: 1,
+      safety_tolerance: safetyTolerance || 2,
+    };
+
+    if (seed !== undefined && seed !== null) {
+      input.seed = seed;
+    }
+
     const createResponse = await fetch(
       "https://api.replicate.com/v1/predictions",
       {
@@ -103,12 +115,7 @@ Deno.serve(async (req: Request) => {
         },
         body: JSON.stringify({
           model: "black-forest-labs/flux-1.1-pro",
-          input: {
-            prompt,
-            aspect_ratio: aspectRatio,
-            num_outputs: 1,
-            safety_tolerance: safetyTolerance || 2,
-          },
+          input,
         }),
       }
     );
