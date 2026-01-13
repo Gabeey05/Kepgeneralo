@@ -109,7 +109,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const createResponse = await fetch(
-      "https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions",
+      "https://api.replicate.com/v1/models/black-forest-labs/flux-1.1-pro/predictions",
       {
         method: "POST",
         headers: {
