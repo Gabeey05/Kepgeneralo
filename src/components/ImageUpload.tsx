@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { Upload, X } from 'lucide-react';
+import { Upload, X, Loader2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ImageUploadProps {
   onImageSelect: (url: string) => void;
@@ -12,15 +14,38 @@ interface ImageUploadProps {
 export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageSelect, onImageClear, previewUrl }) => {
   const { theme } = useTheme();
   const { t } = useLanguage();
+  const { user } = useAuth();
   const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const isDark = theme === 'dark';
 
-  const handleFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (e.target?.result) onImageSelect(e.target.result as string);
-    };
-    reader.readAsDataURL(file);
+  const handleFile = async (file: File) => {
+    if (!user) return;
+
+    setIsUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+
+      const { data, error } = await supabase.storage
+        .from('reference-images')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('reference-images')
+        .getPublicUrl(data.path);
+
+      onImageSelect(publicUrl);
+    } catch (error) {
+      console.error('Upload failed:', error);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   if (previewUrl) {
@@ -34,9 +59,18 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageSelect, onImage
     );
   }
 
+  if (isUploading) {
+    return (
+      <div className={`relative rounded-lg border-2 border-dashed p-6 text-center ${isDark ? 'border-cyan-400/50 bg-cyan-400/10' : 'border-cyan-600 bg-cyan-50'}`}>
+        <Loader2 className={`w-8 h-8 mx-auto mb-2 animate-spin ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />
+        <p className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Uploading...</p>
+      </div>
+    );
+  }
+
   return (
     <div onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); }} className={`relative rounded-lg border-2 border-dashed p-6 text-center cursor-pointer ${isDragging ? (isDark ? 'border-cyan-400 bg-cyan-400/10' : 'border-cyan-600 bg-cyan-50') : (isDark ? 'border-gray-600/50 hover:border-cyan-400/50 bg-gray-900/50' : 'border-gray-300 hover:border-cyan-400 bg-gray-50')}`}>
-      <input type="file" accept="image/*" onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }} className="hidden" id="image-upload" />
+      <input type="file" accept="image/*" onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }} className="hidden" id="image-upload" disabled={isUploading} />
       <label htmlFor="image-upload" className="cursor-pointer block">
         <Upload className={`w-8 h-8 mx-auto mb-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`} />
         <p className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{t('dragDropImage')}</p>

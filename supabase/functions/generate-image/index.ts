@@ -6,10 +6,15 @@ const corsHeaders = {
 
 interface GenerateImageRequest {
   prompt: string;
-  aspectRatio: string;
+  mode: 'create' | 'edit';
+  aspectRatio?: string;
   safetyTolerance?: number;
   seed?: number;
   imageUrl?: string;
+  promptStrength?: number;
+  guidanceScale?: number;
+  inferenceSteps?: number;
+  negativePrompt?: string;
 }
 
 interface ReplicateResponse {
@@ -73,12 +78,32 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { prompt, aspectRatio, safetyTolerance, seed, imageUrl } =
-      (await req.json()) as GenerateImageRequest;
+    const {
+      prompt,
+      mode,
+      aspectRatio,
+      safetyTolerance,
+      seed,
+      imageUrl,
+      promptStrength,
+      guidanceScale,
+      inferenceSteps,
+      negativePrompt,
+    } = (await req.json()) as GenerateImageRequest;
 
-    if (!prompt || !aspectRatio) {
+    if (!prompt || !mode) {
       return new Response(
-        JSON.stringify({ error: "Missing prompt or aspectRatio" }),
+        JSON.stringify({ error: "Missing prompt or mode" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    if (mode === 'edit' && !imageUrl) {
+      return new Response(
+        JSON.stringify({ error: "Missing imageUrl for edit mode" }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -91,36 +116,46 @@ Deno.serve(async (req: Request) => {
       throw new Error("REPLICATE_API_TOKEN not configured");
     }
 
-    const { width, height } = getAspectRatioSize(aspectRatio);
-
+    let modelEndpoint: string;
     const input: Record<string, unknown> = {
       prompt,
-      aspect_ratio: aspectRatio,
-      num_outputs: 1,
       safety_tolerance: safetyTolerance || 2,
     };
 
-    if (seed !== undefined && seed !== null) {
-      input.seed = seed;
-    }
+    if (mode === 'create') {
+      modelEndpoint = "https://api.replicate.com/v1/models/black-forest-labs/flux-1.1-pro/predictions";
+      input.aspect_ratio = aspectRatio || '1:1';
+      input.num_outputs = 1;
 
-    if (imageUrl) {
-      input.image = imageUrl;
-    }
-
-    const createResponse = await fetch(
-      "https://api.replicate.com/v1/models/black-forest-labs/flux-1.1-pro/predictions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Token ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          input,
-        }),
+      if (seed !== undefined && seed !== null) {
+        input.seed = seed;
       }
-    );
+    } else {
+      modelEndpoint = "https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-pro/predictions";
+      input.input_image = imageUrl;
+      input.prompt_strength = promptStrength || 0.8;
+      input.guidance_scale = guidanceScale || 7.5;
+      input.num_inference_steps = inferenceSteps || 50;
+
+      if (negativePrompt) {
+        input.negative_prompt = negativePrompt;
+      }
+
+      if (seed !== undefined && seed !== null) {
+        input.seed = seed;
+      }
+    }
+
+    const createResponse = await fetch(modelEndpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        input,
+      }),
+    });
 
     if (!createResponse.ok) {
       const error = await createResponse.text();

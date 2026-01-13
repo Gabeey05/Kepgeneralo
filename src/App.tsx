@@ -42,6 +42,7 @@ function App() {
   const { t } = useLanguage();
   const [authScreen, setAuthScreen] = useState<'login' | 'signup' | null>(null);
   const [activeView, setActiveView] = useState<'create' | 'explore'>('create');
+  const [mode, setMode] = useState<'create' | 'edit'>('create');
   const [prompt, setPrompt] = useState('');
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
@@ -54,9 +55,20 @@ function App() {
   const [lightboxImageId, setLightboxImageId] = useState<string | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState<string>('');
   const [publicToggle, setPublicToggle] = useState(false);
+  const [promptStrength, setPromptStrength] = useState(0.8);
+  const [guidanceScale, setGuidanceScale] = useState(7.5);
+  const [inferenceSteps, setInferenceSteps] = useState(50);
+  const [negativePrompt, setNegativePrompt] = useState('');
 
   const isDark = theme === 'dark';
   const selectedImage = images.find((img) => img.id === selectedImageId);
+
+  const handleModeChange = (newMode: 'create' | 'edit') => {
+    setMode(newMode);
+    if (newMode === 'create') {
+      setReferenceImageUrl('');
+    }
+  };
 
   if (authLoading) {
     return (
@@ -81,15 +93,37 @@ function App() {
 
   const generateImage = async () => {
     if (!prompt.trim()) return;
+    if (mode === 'edit' && !referenceImageUrl) {
+      setError(t('uploadReferenceRequired'));
+      return;
+    }
     setIsLoading(true);
     setError('');
     try {
       let finalPrompt = prompt;
-      if (style && STYLE_KEYWORDS[style]) finalPrompt += STYLE_KEYWORDS[style];
+      if (mode === 'create' && style && STYLE_KEYWORDS[style]) finalPrompt += STYLE_KEYWORDS[style];
+
+      const requestBody: any = {
+        prompt: finalPrompt,
+        safetyTolerance,
+        mode,
+        ...(seed !== undefined && { seed })
+      };
+
+      if (mode === 'create') {
+        requestBody.aspectRatio = aspectRatio;
+      } else {
+        requestBody.imageUrl = referenceImageUrl;
+        requestBody.promptStrength = promptStrength;
+        requestBody.guidanceScale = guidanceScale;
+        requestBody.inferenceSteps = inferenceSteps;
+        if (negativePrompt.trim()) requestBody.negativePrompt = negativePrompt;
+      }
+
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-        body: JSON.stringify({ prompt: finalPrompt, aspectRatio, safetyTolerance, ...(seed !== undefined && { seed }), ...(referenceImageUrl && { imageUrl: referenceImageUrl }) }),
+        body: JSON.stringify(requestBody),
       });
       const data = await response.json();
       if (!data.success) throw new Error(data.error || t('generationError'));
@@ -160,17 +194,46 @@ function App() {
                 <div className="space-y-6 flex-1 flex flex-col">
                   <div className={`${isDark ? 'bg-gradient-to-br from-gray-800/60 to-gray-900/40 border-gray-700/50' : 'bg-white/60 border-gray-200'} backdrop-blur-xl rounded-2xl p-6 shadow-2xl border`}>
                     <div className="space-y-4">
-                      <div className="flex gap-2">
-                        <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyPress={(e) => { if (e.key === 'Enter' && !isLoading && prompt.trim()) generateImage(); }} placeholder={t('promptPlaceholder')} className={`flex-1 px-6 py-4 ${isDark ? 'bg-gray-950/80 border-gray-600/50 text-white placeholder-gray-600' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'} border rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none h-24`} disabled={isLoading} />
-                        <button onClick={handleSurpriseMe} disabled={isLoading} className={`px-4 py-3 rounded-xl ${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'} shadow-lg`}><Dice5 className="w-5 h-5" /></button>
+                      <div className={`flex gap-2 p-1 ${isDark ? 'bg-gray-900/50 border-gray-700/50' : 'bg-gray-100 border-gray-300'} border rounded-lg mb-4`}>
+                        <button onClick={() => handleModeChange('create')} className={`flex-1 px-4 py-2 rounded-md font-medium text-sm transition-all ${mode === 'create' ? (isDark ? 'bg-cyan-600 text-white' : 'bg-cyan-100 text-cyan-700') : (isDark ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-800')}`}>
+                          {t('modeCreate')}
+                        </button>
+                        <button onClick={() => handleModeChange('edit')} className={`flex-1 px-4 py-2 rounded-md font-medium text-sm transition-all ${mode === 'edit' ? (isDark ? 'bg-cyan-600 text-white' : 'bg-cyan-100 text-cyan-700') : (isDark ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-800')}`}>
+                          {t('modeEdit')}
+                        </button>
                       </div>
-                      <ImageUpload onImageSelect={setReferenceImageUrl} onImageClear={() => setReferenceImageUrl('')} previewUrl={referenceImageUrl} />
-                      <AdvancedOptions aspectRatio={aspectRatio} onAspectRatioChange={setAspectRatio} safetyTolerance={safetyTolerance} onSafetyToleranceChange={setSafetyTolerance} style={style} onStyleChange={setStyle} seed={seed} onSeedChange={setSeed} />
+                      <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-2`}>
+                        <span className="font-semibold">{t('modelUsing')}:</span> {mode === 'create' ? 'FLUX 1.1 Pro' : 'FLUX Kontext Pro'}
+                      </div>
+                      <div className="flex gap-2">
+                        <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyPress={(e) => { if (e.key === 'Enter' && !isLoading && prompt.trim()) generateImage(); }} placeholder={mode === 'create' ? t('promptPlaceholder') : t('promptPlaceholderEdit')} className={`flex-1 px-6 py-4 ${isDark ? 'bg-gray-950/80 border-gray-600/50 text-white placeholder-gray-600' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'} border rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none h-24`} disabled={isLoading} />
+                        {mode === 'create' && <button onClick={handleSurpriseMe} disabled={isLoading} className={`px-4 py-3 rounded-xl ${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'} shadow-lg`}><Dice5 className="w-5 h-5" /></button>}
+                      </div>
+                      {mode === 'edit' && <ImageUpload onImageSelect={setReferenceImageUrl} onImageClear={() => setReferenceImageUrl('')} previewUrl={referenceImageUrl} />}
+                      <AdvancedOptions
+                        aspectRatio={aspectRatio}
+                        onAspectRatioChange={setAspectRatio}
+                        safetyTolerance={safetyTolerance}
+                        onSafetyToleranceChange={setSafetyTolerance}
+                        style={style}
+                        onStyleChange={setStyle}
+                        seed={seed}
+                        onSeedChange={setSeed}
+                        mode={mode}
+                        promptStrength={promptStrength}
+                        onPromptStrengthChange={setPromptStrength}
+                        guidanceScale={guidanceScale}
+                        onGuidanceScaleChange={setGuidanceScale}
+                        inferenceSteps={inferenceSteps}
+                        onInferenceStepsChange={setInferenceSteps}
+                        negativePrompt={negativePrompt}
+                        onNegativePromptChange={setNegativePrompt}
+                      />
                       <div className="flex gap-2">
                         <button onClick={() => setPublicToggle(!publicToggle)} className={`flex-1 py-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm font-medium ${publicToggle ? (isDark ? 'bg-green-900/50 text-green-300' : 'bg-green-100 text-green-700') : (isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600')}`}>
                           {publicToggle ? <><Globe className="w-4 h-4" />{t('makePublic')}</> : <><Lock className="w-4 h-4" />{t('makePrivate')}</>}
                         </button>
-                        <button onClick={generateImage} disabled={isLoading || !prompt.trim()} className="flex-1 py-2 px-6 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 disabled:from-gray-600 disabled:to-gray-700 rounded-lg font-semibold">
+                        <button onClick={generateImage} disabled={isLoading || !prompt.trim() || (mode === 'edit' && !referenceImageUrl)} className="flex-1 py-2 px-6 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 disabled:from-gray-600 disabled:to-gray-700 rounded-lg font-semibold text-white">
                           {isLoading ? <><Loader2 className="w-4 h-4 animate-spin inline mr-2" />{t('generating')}</> : <><Sparkles className="w-4 h-4 inline mr-2" />{t('generateImage')}</>}
                         </button>
                       </div>
