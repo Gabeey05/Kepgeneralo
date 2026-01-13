@@ -1,5 +1,3 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -132,12 +130,12 @@ Deno.serve(async (req: Request) => {
 
     const prediction = (await createResponse.json()) as ReplicateResponse;
 
-    const imageUrl = await pollReplicateStatus(prediction.id, token);
+    const generatedImageUrl = await pollReplicateStatus(prediction.id, token);
 
     return new Response(
       JSON.stringify({
         success: true,
-        imageUrl,
+        imageUrl: generatedImageUrl,
         predictionId: prediction.id,
       }),
       {
