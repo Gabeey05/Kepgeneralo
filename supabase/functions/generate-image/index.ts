@@ -11,6 +11,7 @@ interface GenerateImageRequest {
   aspectRatio: string;
   safetyTolerance?: number;
   seed?: number;
+  imageUrl?: string;
 }
 
 interface ReplicateResponse {
@@ -74,7 +75,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { prompt, aspectRatio, safetyTolerance, seed } =
+    const { prompt, aspectRatio, safetyTolerance, seed, imageUrl } =
       (await req.json()) as GenerateImageRequest;
 
     if (!prompt || !aspectRatio) {
@@ -105,6 +106,10 @@ Deno.serve(async (req: Request) => {
       input.seed = seed;
     }
 
+    if (imageUrl) {
+      input.image = imageUrl;
+    }
+
     const createResponse = await fetch(
       "https://api.replicate.com/v1/predictions",
       {
@@ -114,7 +119,7 @@ Deno.serve(async (req: Request) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "black-forest-labs/flux-1.1-pro",
+          version: "c5c1a0619c8d8498bd66be5c062c0cc75b906e1f0e70f67acbd63c8c5c79c8c4",
           input,
         }),
       }
