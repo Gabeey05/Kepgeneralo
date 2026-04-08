@@ -1,3 +1,5 @@
+import { createClient } from "npm:@supabase/supabase-js@2";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -15,6 +17,7 @@ interface GenerateImageRequest {
   guidanceScale?: number;
   inferenceSteps?: number;
   negativePrompt?: string;
+  userId?: string;
 }
 
 interface ReplicateResponse {
@@ -69,6 +72,42 @@ const pollReplicateStatus = async (
   throw new Error("Prediction timeout");
 };
 
+const uploadToStorage = async (
+  replicateUrl: string,
+  userId: string,
+  supabaseUrl: string,
+  serviceRoleKey: string
+): Promise<string> => {
+  const imgResponse = await fetch(replicateUrl);
+  if (!imgResponse.ok) throw new Error(`Failed to fetch generated image: ${imgResponse.status}`);
+  const imgBuffer = await imgResponse.arrayBuffer();
+  const contentType = imgResponse.headers.get("content-type") || "image/png";
+  const ext = contentType.includes("webp") ? "webp" : contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : "png";
+
+  const filePath = `${userId}/${Date.now()}.${ext}`;
+
+  const uploadResponse = await fetch(
+    `${supabaseUrl}/storage/v1/object/generated-images/${filePath}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${serviceRoleKey}`,
+        "Content-Type": contentType,
+        "x-upsert": "false",
+      },
+      body: imgBuffer,
+    }
+  );
+
+  if (!uploadResponse.ok) {
+    const errText = await uploadResponse.text();
+    throw new Error(`Storage upload failed: ${uploadResponse.status} ${errText}`);
+  }
+
+  const publicUrl = `${supabaseUrl}/storage/v1/object/public/generated-images/${filePath}`;
+  return publicUrl;
+};
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -89,6 +128,7 @@ Deno.serve(async (req: Request) => {
       guidanceScale,
       inferenceSteps,
       negativePrompt,
+      userId,
     } = (await req.json()) as GenerateImageRequest;
 
     if (!prompt || !mode) {
@@ -112,9 +152,10 @@ Deno.serve(async (req: Request) => {
     }
 
     const token = Deno.env.get("REPLICATE_API_TOKEN");
-    if (!token) {
-      throw new Error("REPLICATE_API_TOKEN not configured");
-    }
+    if (!token) throw new Error("REPLICATE_API_TOKEN not configured");
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     let modelEndpoint: string;
     const input: Record<string, unknown> = {
@@ -126,10 +167,7 @@ Deno.serve(async (req: Request) => {
       modelEndpoint = "https://api.replicate.com/v1/models/black-forest-labs/flux-1.1-pro/predictions";
       input.aspect_ratio = aspectRatio || '1:1';
       input.num_outputs = 1;
-
-      if (seed !== undefined && seed !== null) {
-        input.seed = seed;
-      }
+      if (seed !== undefined && seed !== null) input.seed = seed;
     } else {
       modelEndpoint = "https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-pro/predictions";
 
@@ -137,9 +175,7 @@ Deno.serve(async (req: Request) => {
       if (imageUrl && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
         try {
           const imgResponse = await fetch(imageUrl);
-          if (!imgResponse.ok) {
-            throw new Error(`Failed to fetch image: ${imgResponse.status}`);
-          }
+          if (!imgResponse.ok) throw new Error(`Failed to fetch image: ${imgResponse.status}`);
           const imgBuffer = await imgResponse.arrayBuffer();
           const imgArray = new Uint8Array(imgBuffer);
           let binary = '';
@@ -158,14 +194,8 @@ Deno.serve(async (req: Request) => {
       input.prompt_strength = promptStrength || 0.8;
       input.guidance_scale = guidanceScale || 7.5;
       input.num_inference_steps = inferenceSteps || 50;
-
-      if (negativePrompt) {
-        input.negative_prompt = negativePrompt;
-      }
-
-      if (seed !== undefined && seed !== null) {
-        input.seed = seed;
-      }
+      if (negativePrompt) input.negative_prompt = negativePrompt;
+      if (seed !== undefined && seed !== null) input.seed = seed;
     }
 
     const createResponse = await fetch(modelEndpoint, {
@@ -174,9 +204,7 @@ Deno.serve(async (req: Request) => {
         Authorization: `Token ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        input,
-      }),
+      body: JSON.stringify({ input }),
     });
 
     if (!createResponse.ok) {
@@ -185,13 +213,29 @@ Deno.serve(async (req: Request) => {
     }
 
     const prediction = (await createResponse.json()) as ReplicateResponse;
+    const replicateImageUrl = await pollReplicateStatus(prediction.id, token);
 
-    const generatedImageUrl = await pollReplicateStatus(prediction.id, token);
+    if (!replicateImageUrl) throw new Error("No image URL returned from Replicate");
+
+    let finalImageUrl = replicateImageUrl;
+    let storagePath: string | null = null;
+
+    if (userId && supabaseUrl && serviceRoleKey) {
+      try {
+        finalImageUrl = await uploadToStorage(replicateImageUrl, userId, supabaseUrl, serviceRoleKey);
+        const parts = new URL(finalImageUrl).pathname.split('/object/public/generated-images/');
+        storagePath = parts[1] || null;
+      } catch (uploadErr) {
+        console.error("Storage upload failed, falling back to Replicate URL:", uploadErr);
+        finalImageUrl = replicateImageUrl;
+      }
+    }
 
     return new Response(
       JSON.stringify({
         success: true,
-        imageUrl: generatedImageUrl,
+        imageUrl: finalImageUrl,
+        storagePath,
         predictionId: prediction.id,
       }),
       {
@@ -203,8 +247,7 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         success: false,
-        error:
-          error instanceof Error ? error.message : "Unknown error occurred",
+        error: error instanceof Error ? error.message : "Unknown error occurred",
       }),
       {
         status: 500,

@@ -129,7 +129,8 @@ function App() {
         prompt: finalPrompt,
         safetyTolerance,
         mode,
-        ...(seed !== undefined && { seed })
+        ...(seed !== undefined && { seed }),
+        ...(user && { userId: user.id }),
       };
 
       if (mode === 'create') {
@@ -154,7 +155,12 @@ function App() {
       setSelectedImageId(newImage.id);
       showToast('Image generated successfully!', 'success');
       if (user) {
-        await supabase.from('generated_images').insert({ user_id: user.id, url: data.imageUrl, prompt: finalPrompt, is_public: publicToggle });
+        await supabase.from('generated_images').insert({
+          user_id: user.id,
+          image_path: data.storagePath || data.imageUrl,
+          prompt: finalPrompt,
+          is_public: publicToggle,
+        });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('generationError');
