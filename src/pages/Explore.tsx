@@ -7,7 +7,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 
 interface ImageWithLikes {
   id: string;
-  url: string;
+  image_path: string;
   prompt: string;
   likes_count: number;
   user_liked: boolean;
@@ -47,7 +47,7 @@ export const Explore = () => {
 
       const { data, error } = await supabase
         .from('generated_images')
-        .select('id, url, prompt')
+        .select('id, image_path, prompt')
         .eq('is_public', true)
         .order('created_at', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
@@ -57,6 +57,7 @@ export const Explore = () => {
       const batch = data || [];
       if (batch.length < PAGE_SIZE) setHasMore(false);
 
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
       const withLikes = await Promise.all(batch.map(async (img) => {
         const { count } = await supabase.from('image_likes').select('id', { count: 'exact', head: true }).eq('image_id', img.id);
         let user_liked = false;
@@ -64,7 +65,9 @@ export const Explore = () => {
           const { data: likeData } = await supabase.from('image_likes').select('id').eq('image_id', img.id).eq('user_id', user.id).maybeSingle();
           user_liked = !!likeData;
         }
-        return { ...img, likes_count: count || 0, user_liked };
+        const imagePath = img.image_path;
+        const resolvedUrl = imagePath.startsWith('http') ? imagePath : `${supabaseUrl}/storage/v1/object/public/generated-images/${imagePath}`;
+        return { ...img, image_path: resolvedUrl, likes_count: count || 0, user_liked };
       }));
 
       setImages((prev) => append ? [...prev, ...withLikes] : withLikes);
@@ -160,7 +163,7 @@ export const Explore = () => {
                       <div className={`w-full h-48 ${isDark ? 'skeleton' : 'skeleton-light'}`} />
                     )}
                     <img
-                      src={img.url}
+                      src={img.image_path}
                       alt={img.prompt}
                       onLoad={() => setLoadedIds((prev) => new Set(prev).add(img.id))}
                       className={`w-full object-cover transition-opacity duration-500 ${loadedIds.has(img.id) ? 'opacity-100' : 'opacity-0 h-0'}`}

@@ -12,8 +12,10 @@ import { AdvancedOptions } from './components/AdvancedOptions';
 import { Lightbox } from './components/Lightbox';
 import { ImageUpload } from './components/ImageUpload';
 import { useToast } from './components/Toast';
+import { ShareModal } from './components/ShareModal';
 import { supabase } from './lib/supabase';
 import { fetchImageBlobViaProxy } from './lib/imageUtils';
+
 
 const SURPRISE_PROMPTS = [
   'A stunning aurora borealis over a frozen landscape with crystalline ice formations, ultra detailed, 8k',
@@ -33,9 +35,11 @@ const STYLE_KEYWORDS: { [key: string]: string } = {
 
 interface GalleryImage {
   id: string;
+  dbId?: string;
   url: string;
   prompt: string;
   timestamp: number;
+  isPublic?: boolean;
 }
 
 function App() {
@@ -64,6 +68,7 @@ function App() {
   const [negativePrompt, setNegativePrompt] = useState('');
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [imageVisible, setImageVisible] = useState(false);
+  const [shareModalImage, setShareModalImage] = useState<GalleryImage | null>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   const isDark = theme === 'dark';
@@ -150,18 +155,19 @@ function App() {
       });
       const data = await response.json();
       if (!data.success) throw new Error(data.error || t('generationError'));
-      const newImage: GalleryImage = { id: crypto.randomUUID(), url: data.imageUrl, prompt: finalPrompt, timestamp: Date.now() };
-      setImages((prev) => [newImage, ...prev]);
-      setSelectedImageId(newImage.id);
-      showToast('Image generated successfully!', 'success');
+      const newImage: GalleryImage = { id: crypto.randomUUID(), url: data.imageUrl, prompt: finalPrompt, timestamp: Date.now(), isPublic: publicToggle };
       if (user) {
-        await supabase.from('generated_images').insert({
+        const { data: inserted } = await supabase.from('generated_images').insert({
           user_id: user.id,
           image_path: data.storagePath || data.imageUrl,
           prompt: finalPrompt,
           is_public: publicToggle,
-        });
+        }).select('id').maybeSingle();
+        if (inserted?.id) newImage.dbId = inserted.id;
       }
+      setImages((prev) => [newImage, ...prev]);
+      setSelectedImageId(newImage.id);
+      showToast('Image generated successfully!', 'success');
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('generationError');
       setError(msg);
@@ -190,29 +196,9 @@ function App() {
     }
   };
 
-  const handleShare = async () => {
+  const handleShare = () => {
     if (!selectedImage) return;
-    try {
-      if (navigator.canShare) {
-        const blob = await fetchImageBlobViaProxy(selectedImage.url);
-        const file = new File([blob], `image-${selectedImage.timestamp}.png`, { type: blob.type || 'image/png' });
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: 'AI Generated Image', text: selectedImage.prompt });
-          return;
-        }
-      }
-      await navigator.clipboard.writeText(selectedImage.url);
-      showToast('Image URL copied to clipboard!', 'success');
-    } catch (err) {
-      if (err instanceof Error && err.name !== 'AbortError') {
-        try {
-          await navigator.clipboard.writeText(selectedImage.url);
-          showToast('Image URL copied to clipboard!', 'success');
-        } catch {
-          showToast('Share failed', 'error');
-        }
-      }
-    }
+    setShareModalImage(selectedImage);
   };
 
   const handleSignOut = async () => {
@@ -444,6 +430,7 @@ function App() {
               selectedId={selectedImageId}
               onSelect={setSelectedImageId}
               onClear={() => { setImages([]); setSelectedImageId(null); }}
+              onShare={(img) => setShareModalImage(img)}
             />
           </div>
         </div>
@@ -455,6 +442,20 @@ function App() {
         onClose={() => setLightboxImageId(null)}
         onNavigate={(id) => setLightboxImageId(id)}
       />
+      {shareModalImage && user && (
+        <ShareModal
+          imageId={shareModalImage.dbId || ''}
+          imageUrl={shareModalImage.url}
+          prompt={shareModalImage.prompt}
+          isPublic={shareModalImage.isPublic ?? false}
+          userId={user.id}
+          onClose={() => setShareModalImage(null)}
+          onPublished={() => {
+            setImages((prev) => prev.map((img) => img.id === shareModalImage.id ? { ...img, isPublic: true } : img));
+            showToast('Image published to community feed!', 'success');
+          }}
+        />
+      )}
       <SettingsPanel />
     </div>
   );
