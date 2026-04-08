@@ -132,7 +132,29 @@ Deno.serve(async (req: Request) => {
       }
     } else {
       modelEndpoint = "https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-pro/predictions";
-      input.input_image = imageUrl;
+
+      let imageData = imageUrl;
+      if (imageUrl && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
+        try {
+          const imgResponse = await fetch(imageUrl);
+          if (!imgResponse.ok) {
+            throw new Error(`Failed to fetch image: ${imgResponse.status}`);
+          }
+          const imgBuffer = await imgResponse.arrayBuffer();
+          const imgArray = new Uint8Array(imgBuffer);
+          let binary = '';
+          for (let i = 0; i < imgArray.length; i++) {
+            binary += String.fromCharCode(imgArray[i]);
+          }
+          const base64 = btoa(binary);
+          const contentType = imgResponse.headers.get('content-type') || 'image/jpeg';
+          imageData = `data:${contentType};base64,${base64}`;
+        } catch (fetchErr) {
+          throw new Error(`Could not load reference image: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`);
+        }
+      }
+
+      input.input_image = imageData;
       input.prompt_strength = promptStrength || 0.8;
       input.guidance_scale = guidanceScale || 7.5;
       input.num_inference_steps = inferenceSteps || 50;
