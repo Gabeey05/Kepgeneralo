@@ -193,20 +193,24 @@ function App() {
   const handleShare = async () => {
     if (!selectedImage) return;
     try {
-      const blob = await fetchImageBlobViaProxy(selectedImage.url);
-      const file = new File([blob], `image-${selectedImage.timestamp}.png`, { type: blob.type || 'image/png' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'AI Generated Image', text: selectedImage.prompt });
-      } else if (navigator.share) {
-        await navigator.share({ title: 'AI Generated Image', text: selectedImage.prompt, url: selectedImage.url });
-      } else {
-        await navigator.clipboard.writeText(selectedImage.url);
-        showToast('Image URL copied to clipboard!', 'success');
+      if (navigator.canShare) {
+        const blob = await fetchImageBlobViaProxy(selectedImage.url);
+        const file = new File([blob], `image-${selectedImage.timestamp}.png`, { type: blob.type || 'image/png' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: 'AI Generated Image', text: selectedImage.prompt });
+          return;
+        }
       }
+      await navigator.clipboard.writeText(selectedImage.url);
+      showToast('Image URL copied to clipboard!', 'success');
     } catch (err) {
       if (err instanceof Error && err.name !== 'AbortError') {
-        console.error('Share failed:', err);
-        showToast('Share failed', 'error');
+        try {
+          await navigator.clipboard.writeText(selectedImage.url);
+          showToast('Image URL copied to clipboard!', 'success');
+        } catch {
+          showToast('Share failed', 'error');
+        }
       }
     }
   };

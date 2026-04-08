@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, Images, Trash2, Share2 } from 'lucide-react';
+import { Download, Images, Trash2, Share2, Check } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { fetchImageBlobViaProxy } from '../lib/imageUtils';
 
@@ -21,6 +21,7 @@ export const ImageGallery = ({ images, selectedId, onSelect, onClear }: ImageGal
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [loadedIds, setLoadedIds] = useState<Set<string>>(new Set());
+  const [copiedIds, setCopiedIds] = useState<Set<string>>(new Set());
 
   const handleDownload = async (e: React.MouseEvent, image: GalleryImage) => {
     e.stopPropagation();
@@ -42,18 +43,26 @@ export const ImageGallery = ({ images, selectedId, onSelect, onClear }: ImageGal
   const handleShare = async (e: React.MouseEvent, image: GalleryImage) => {
     e.stopPropagation();
     try {
-      const blob = await fetchImageBlobViaProxy(image.url);
-      const file = new File([blob], `image-${image.timestamp}.png`, { type: blob.type || 'image/png' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'AI Generated Image', text: image.prompt });
-      } else if (navigator.share) {
-        await navigator.share({ title: 'AI Generated Image', text: image.prompt, url: image.url });
-      } else {
-        await navigator.clipboard.writeText(image.url);
+      if (navigator.canShare) {
+        const blob = await fetchImageBlobViaProxy(image.url);
+        const file = new File([blob], `image-${image.timestamp}.png`, { type: blob.type || 'image/png' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: 'AI Generated Image', text: image.prompt });
+          return;
+        }
       }
+      await navigator.clipboard.writeText(image.url);
+      setCopiedIds((prev) => new Set(prev).add(image.id));
+      setTimeout(() => setCopiedIds((prev) => { const s = new Set(prev); s.delete(image.id); return s; }), 2000);
     } catch (err) {
       if (err instanceof Error && err.name !== 'AbortError') {
-        console.error('Share failed:', err);
+        try {
+          await navigator.clipboard.writeText(image.url);
+          setCopiedIds((prev) => new Set(prev).add(image.id));
+          setTimeout(() => setCopiedIds((prev) => { const s = new Set(prev); s.delete(image.id); return s; }), 2000);
+        } catch {
+          console.error('Share failed:', err);
+        }
       }
     }
   };
@@ -122,10 +131,10 @@ export const ImageGallery = ({ images, selectedId, onSelect, onClear }: ImageGal
                   <div className="flex gap-1 self-end">
                     <button
                       onClick={(e) => handleShare(e, img)}
-                      className="p-1.5 bg-gray-700/80 hover:bg-gray-600 rounded-lg transition-all duration-150 hover:scale-110 active:scale-95 shadow-lg"
-                      title="Share"
+                      className={`p-1.5 rounded-lg transition-all duration-150 hover:scale-110 active:scale-95 shadow-lg ${copiedIds.has(img.id) ? 'bg-emerald-600' : 'bg-gray-700/80 hover:bg-gray-600'}`}
+                      title={copiedIds.has(img.id) ? 'Copied!' : 'Share'}
                     >
-                      <Share2 className="w-3 h-3 text-white" />
+                      {copiedIds.has(img.id) ? <Check className="w-3 h-3 text-white" /> : <Share2 className="w-3 h-3 text-white" />}
                     </button>
                     <button
                       onClick={(e) => handleDownload(e, img)}
