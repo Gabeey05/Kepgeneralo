@@ -184,11 +184,24 @@ function App() {
   };
 
   const handleShare = async () => {
-    if (!selectedImage || !navigator.share) return;
+    if (!selectedImage) return;
     try {
-      await navigator.share({ title: 'AI Generated Image', text: selectedImage.prompt, url: selectedImage.url });
+      const response = await fetch(selectedImage.url);
+      const blob = await response.blob();
+      const file = new File([blob], `image-${selectedImage.timestamp}.png`, { type: blob.type || 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'AI Generated Image', text: selectedImage.prompt });
+      } else if (navigator.share) {
+        await navigator.share({ title: 'AI Generated Image', text: selectedImage.prompt, url: selectedImage.url });
+      } else {
+        await navigator.clipboard.writeText(selectedImage.url);
+        showToast('Image URL copied to clipboard!', 'success');
+      }
     } catch (err) {
-      console.error('Share failed:', err);
+      if (err instanceof Error && err.name !== 'AbortError') {
+        console.error('Share failed:', err);
+        showToast('Share failed', 'error');
+      }
     }
   };
 
@@ -400,14 +413,12 @@ function App() {
                           >
                             <Download className="w-4 h-4" />{t('download')}
                           </button>
-                          {navigator.share && (
-                            <button
-                              onClick={handleShare}
-                              className={`flex-1 py-3 px-4 rounded-xl font-medium flex items-center justify-center gap-2 transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
-                            >
-                              <Share2 className="w-4 h-4" />{t('share')}
-                            </button>
-                          )}
+                          <button
+                            onClick={handleShare}
+                            className={`flex-1 py-3 px-4 rounded-xl font-medium flex items-center justify-center gap-2 transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+                          >
+                            <Share2 className="w-4 h-4" />{t('share')}
+                          </button>
                         </div>
                       </div>
                     </div>

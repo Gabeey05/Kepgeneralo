@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, Images, Trash2 } from 'lucide-react';
+import { Download, Images, Trash2, Share2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface GalleryImage {
@@ -36,6 +36,26 @@ export const ImageGallery = ({ images, selectedId, onSelect, onClear }: ImageGal
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Download failed:', err);
+    }
+  };
+
+  const handleShare = async (e: React.MouseEvent, image: GalleryImage) => {
+    e.stopPropagation();
+    try {
+      const response = await fetch(image.url);
+      const blob = await response.blob();
+      const file = new File([blob], `image-${image.timestamp}.png`, { type: blob.type || 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'AI Generated Image', text: image.prompt });
+      } else if (navigator.share) {
+        await navigator.share({ title: 'AI Generated Image', text: image.prompt, url: image.url });
+      } else {
+        await navigator.clipboard.writeText(image.url);
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        console.error('Share failed:', err);
+      }
     }
   };
 
@@ -100,12 +120,22 @@ export const ImageGallery = ({ images, selectedId, onSelect, onClear }: ImageGal
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-200 flex flex-col justify-end p-2">
                   <p className="text-xs text-white/90 line-clamp-2 mb-1.5 leading-tight">{img.prompt}</p>
-                  <button
-                    onClick={(e) => handleDownload(e, img)}
-                    className="self-end p-1.5 bg-cyan-500 hover:bg-cyan-400 rounded-lg transition-all duration-150 hover:scale-110 active:scale-95 shadow-lg"
-                  >
-                    <Download className="w-3 h-3 text-white" />
-                  </button>
+                  <div className="flex gap-1 self-end">
+                    <button
+                      onClick={(e) => handleShare(e, img)}
+                      className="p-1.5 bg-gray-700/80 hover:bg-gray-600 rounded-lg transition-all duration-150 hover:scale-110 active:scale-95 shadow-lg"
+                      title="Share"
+                    >
+                      <Share2 className="w-3 h-3 text-white" />
+                    </button>
+                    <button
+                      onClick={(e) => handleDownload(e, img)}
+                      className="p-1.5 bg-cyan-500 hover:bg-cyan-400 rounded-lg transition-all duration-150 hover:scale-110 active:scale-95 shadow-lg"
+                      title="Download"
+                    >
+                      <Download className="w-3 h-3 text-white" />
+                    </button>
+                  </div>
                 </div>
                 {selectedId === img.id && (
                   <div className="absolute top-1.5 left-1.5 w-2 h-2 bg-cyan-400 rounded-full shadow-lg shadow-cyan-400/60 animate-pulse" />
