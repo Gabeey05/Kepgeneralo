@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Download, Images, Trash2, Share2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { fetchImageBlobViaProxy } from '../lib/imageUtils';
 
 interface GalleryImage {
   id: string;
@@ -24,8 +25,7 @@ export const ImageGallery = ({ images, selectedId, onSelect, onClear }: ImageGal
   const handleDownload = async (e: React.MouseEvent, image: GalleryImage) => {
     e.stopPropagation();
     try {
-      const response = await fetch(image.url);
-      const blob = await response.blob();
+      const blob = await fetchImageBlobViaProxy(image.url);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -42,8 +42,7 @@ export const ImageGallery = ({ images, selectedId, onSelect, onClear }: ImageGal
   const handleShare = async (e: React.MouseEvent, image: GalleryImage) => {
     e.stopPropagation();
     try {
-      const response = await fetch(image.url);
-      const blob = await response.blob();
+      const blob = await fetchImageBlobViaProxy(image.url);
       const file = new File([blob], `image-${image.timestamp}.png`, { type: blob.type || 'image/png' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], title: 'AI Generated Image', text: image.prompt });

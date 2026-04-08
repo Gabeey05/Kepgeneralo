@@ -13,6 +13,7 @@ import { Lightbox } from './components/Lightbox';
 import { ImageUpload } from './components/ImageUpload';
 import { useToast } from './components/Toast';
 import { supabase } from './lib/supabase';
+import { fetchImageBlobViaProxy } from './lib/imageUtils';
 
 const SURPRISE_PROMPTS = [
   'A stunning aurora borealis over a frozen landscape with crystalline ice formations, ultra detailed, 8k',
@@ -167,8 +168,7 @@ function App() {
   const handleDownload = async () => {
     if (!selectedImage) return;
     try {
-      const response = await fetch(selectedImage.url);
-      const blob = await response.blob();
+      const blob = await fetchImageBlobViaProxy(selectedImage.url);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -180,14 +180,14 @@ function App() {
       showToast('Image downloaded!', 'success');
     } catch (err) {
       console.error('Download failed:', err);
+      showToast('Download failed', 'error');
     }
   };
 
   const handleShare = async () => {
     if (!selectedImage) return;
     try {
-      const response = await fetch(selectedImage.url);
-      const blob = await response.blob();
+      const blob = await fetchImageBlobViaProxy(selectedImage.url);
       const file = new File([blob], `image-${selectedImage.timestamp}.png`, { type: blob.type || 'image/png' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], title: 'AI Generated Image', text: selectedImage.prompt });
