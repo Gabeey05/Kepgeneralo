@@ -48,7 +48,7 @@ function App() {
   const { t } = useLanguage();
   const { showToast } = useToast();
   const [authScreen, setAuthScreen] = useState<'login' | 'signup' | null>(null);
-  const [activeView, setActiveView] = useState<'create' | 'explore'>('create');
+  const [activeView, setActiveView] = useState<'create' | 'explore'>('explore');
   const [mode, setMode] = useState<'create' | 'edit'>('create');
   const [prompt, setPrompt] = useState('');
   const [images, setImages] = useState<GalleryImage[]>([]);
@@ -69,6 +69,7 @@ function App() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [imageVisible, setImageVisible] = useState(false);
   const [shareModalImage, setShareModalImage] = useState<GalleryImage | null>(null);
+  const [imagesLoaded, setImagesLoaded] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   const isDark = theme === 'dark';
@@ -91,6 +92,46 @@ function App() {
     }
   }, [selectedImageId]);
 
+  useEffect(() => {
+    if (!user || imagesLoaded) return;
+    const loadUserImages = async () => {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const { data, error } = await supabase
+        .from('generated_images')
+        .select('id, image_path, prompt, is_public, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (error || !data) return;
+      const loaded: GalleryImage[] = data.map((row) => {
+        const imagePath = row.image_path as string;
+        const url = imagePath.startsWith('http')
+          ? imagePath
+          : `${supabaseUrl}/storage/v1/object/public/generated-images/${imagePath}`;
+        return {
+          id: crypto.randomUUID(),
+          dbId: row.id,
+          url,
+          prompt: row.prompt,
+          timestamp: new Date(row.created_at).getTime(),
+          isPublic: row.is_public,
+        };
+      });
+      setImages(loaded);
+      if (loaded.length > 0) setSelectedImageId(loaded[0].id);
+      setImagesLoaded(true);
+    };
+    loadUserImages();
+  }, [user, imagesLoaded]);
+
+  useEffect(() => {
+    if (!user) {
+      setImages([]);
+      setSelectedImageId(null);
+      setImagesLoaded(false);
+    }
+  }, [user]);
+
   const handleModeChange = (newMode: 'create' | 'edit') => {
     setMode(newMode);
     if (newMode === 'create') setReferenceImageUrl('');
@@ -104,10 +145,14 @@ function App() {
     );
   }
 
-  if (!session) {
+  if (!session && authScreen !== null) {
     return (
       <>
-        {authScreen === 'signup' ? <Signup onSwitchToLogin={() => setAuthScreen('login')} /> : <Login onSwitchToSignup={() => setAuthScreen('signup')} />}
+        {authScreen === 'signup' ? (
+          <Signup onSwitchToLogin={() => setAuthScreen('login')} />
+        ) : (
+          <Login onSwitchToSignup={() => setAuthScreen('signup')} onClose={() => setAuthScreen(null)} />
+        )}
         <SettingsPanel />
       </>
     );
@@ -119,6 +164,10 @@ function App() {
 
   const generateImage = async () => {
     if (!prompt.trim()) return;
+    if (!session) {
+      setAuthScreen('login');
+      return;
+    }
     if (mode === 'edit' && !referenceImageUrl) {
       setError(t('uploadReferenceRequired'));
       return;
@@ -223,7 +272,10 @@ function App() {
 
             <div className={`flex gap-1 ${isDark ? 'bg-gray-900/50 border-gray-700/50' : 'bg-gray-100 border-gray-300'} border rounded-xl p-1`}>
               <button
-                onClick={() => setActiveView('create')}
+                onClick={() => {
+                  if (!session) { setAuthScreen('login'); return; }
+                  setActiveView('create');
+                }}
                 className={`px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${activeView === 'create' ? (isDark ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-500/20' : 'bg-white text-cyan-700 shadow-sm') : (isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-800')}`}
               >
                 {t('navCreate')}
@@ -237,45 +289,65 @@ function App() {
             </div>
 
             <div className="relative" ref={profileMenuRef}>
-              <button
-                onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-150 hover:scale-[1.02] active:scale-[0.98]
-                  ${isDark ? 'hover:bg-gray-700/60 text-gray-300' : 'hover:bg-gray-100 text-gray-700'}`}
-              >
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-md">
-                  {userInitial}
-                </div>
-                <span className={`text-sm font-medium max-w-[100px] truncate hidden sm:block ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  {user?.email?.split('@')[0]}
-                </span>
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${profileMenuOpen ? 'rotate-180' : ''} ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
-              </button>
+              {session ? (
+                <>
+                  <button
+                    onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-150 hover:scale-[1.02] active:scale-[0.98]
+                      ${isDark ? 'hover:bg-gray-700/60 text-gray-300' : 'hover:bg-gray-100 text-gray-700'}`}
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-md">
+                      {userInitial}
+                    </div>
+                    <span className={`text-sm font-medium max-w-[100px] truncate hidden sm:block ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                      {user?.email?.split('@')[0]}
+                    </span>
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${profileMenuOpen ? 'rotate-180' : ''} ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
+                  </button>
 
-              {profileMenuOpen && (
-                <div className={`absolute right-0 top-full mt-2 w-52 rounded-2xl border shadow-2xl overflow-hidden animate-slideUp z-50
-                  ${isDark ? 'bg-gray-800/95 border-gray-700/60 backdrop-blur-xl' : 'bg-white border-gray-200 shadow-xl'}`}>
-                  <div className={`px-4 py-3 border-b ${isDark ? 'border-gray-700/50' : 'border-gray-100'}`}>
-                    <p className={`text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Signed in as</p>
-                    <p className={`text-sm font-semibold truncate mt-0.5 ${isDark ? 'text-white' : 'text-gray-900'}`}>{user?.email}</p>
-                  </div>
-                  <div className="p-1.5">
-                    <button
-                      onClick={() => setProfileMenuOpen(false)}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150
-                        ${isDark ? 'text-gray-300 hover:bg-gray-700/60 hover:text-white' : 'text-gray-700 hover:bg-gray-50'}`}
-                    >
-                      <User className="w-4 h-4" />
-                      Profile
-                    </button>
-                    <button
-                      onClick={handleSignOut}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150
-                        ${isDark ? 'text-red-400 hover:bg-red-900/30 hover:text-red-300' : 'text-red-600 hover:bg-red-50'}`}
-                    >
-                      <LogOut className="w-4 h-4" />
-                      {t('logout')}
-                    </button>
-                  </div>
+                  {profileMenuOpen && (
+                    <div className={`absolute right-0 top-full mt-2 w-52 rounded-2xl border shadow-2xl overflow-hidden animate-slideUp z-50
+                      ${isDark ? 'bg-gray-800/95 border-gray-700/60 backdrop-blur-xl' : 'bg-white border-gray-200 shadow-xl'}`}>
+                      <div className={`px-4 py-3 border-b ${isDark ? 'border-gray-700/50' : 'border-gray-100'}`}>
+                        <p className={`text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Signed in as</p>
+                        <p className={`text-sm font-semibold truncate mt-0.5 ${isDark ? 'text-white' : 'text-gray-900'}`}>{user?.email}</p>
+                      </div>
+                      <div className="p-1.5">
+                        <button
+                          onClick={() => setProfileMenuOpen(false)}
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150
+                            ${isDark ? 'text-gray-300 hover:bg-gray-700/60 hover:text-white' : 'text-gray-700 hover:bg-gray-50'}`}
+                        >
+                          <User className="w-4 h-4" />
+                          Profile
+                        </button>
+                        <button
+                          onClick={handleSignOut}
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150
+                            ${isDark ? 'text-red-400 hover:bg-red-900/30 hover:text-red-300' : 'text-red-600 hover:bg-red-50'}`}
+                        >
+                          <LogOut className="w-4 h-4" />
+                          {t('logout')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setAuthScreen('login')}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-[0.98]
+                      ${isDark ? 'text-gray-300 hover:bg-gray-700/60' : 'text-gray-700 hover:bg-gray-100'}`}
+                  >
+                    Sign in
+                  </button>
+                  <button
+                    onClick={() => setAuthScreen('signup')}
+                    className="px-4 py-2 rounded-xl text-sm font-medium bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-400 hover:to-blue-500 transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] shadow-md"
+                  >
+                    Sign up
+                  </button>
                 </div>
               )}
             </div>
@@ -285,7 +357,7 @@ function App() {
 
       {activeView === 'explore' && <Explore />}
 
-      {activeView === 'create' && (
+      {activeView === 'create' && session && (
         <div className="flex flex-col lg:flex-row h-[calc(100vh-64px)]">
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto scrollbar-thin">

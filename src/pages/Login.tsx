@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, X } from 'lucide-react';
 
-export const Login = ({ onSwitchToSignup }: { onSwitchToSignup: () => void }) => {
+export const Login = ({ onSwitchToSignup, onClose }: { onSwitchToSignup: () => void; onClose?: () => void }) => {
   const { signIn } = useAuth();
   const { t } = useLanguage();
   const { theme } = useTheme();
@@ -29,7 +29,16 @@ export const Login = ({ onSwitchToSignup }: { onSwitchToSignup: () => void }) =>
 
   return (
     <div className={`min-h-screen ${isDark ? 'bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950' : 'bg-gradient-to-br from-gray-50 via-white to-gray-100'} flex items-center justify-center p-4`}>
-      <div className={`w-full max-w-md ${isDark ? 'bg-gray-800/60 border-gray-700/50' : 'bg-white border-gray-200'} backdrop-blur-xl rounded-2xl p-8 shadow-2xl border`}>
+      <div className={`w-full max-w-md ${isDark ? 'bg-gray-800/60 border-gray-700/50' : 'bg-white border-gray-200'} backdrop-blur-xl rounded-2xl p-8 shadow-2xl border relative`}>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className={`absolute top-4 right-4 p-1.5 rounded-lg transition-all duration-150 hover:scale-110 active:scale-95
+              ${isDark ? 'text-gray-400 hover:bg-gray-700/60 hover:text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
         <div className="flex items-center justify-center gap-3 mb-8">
           <Sparkles className={`w-8 h-8 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />
           <h1 className={`text-3xl font-bold bg-gradient-to-r ${isDark ? 'from-cyan-400 to-blue-500' : 'from-cyan-600 to-blue-600'} bg-clip-text text-transparent`}>
