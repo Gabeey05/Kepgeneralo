@@ -18,7 +18,11 @@ interface Profile {
 
 type Tab = 'images' | 'liked' | 'stats' | 'activity';
 
-export const Profile = () => {
+interface Props {
+  onImagesChanged?: () => void;
+}
+
+export const Profile = ({ onImagesChanged }: Props) => {
   const { user } = useAuth();
   const { theme } = useTheme();
   const { showToast } = useToast();
@@ -252,7 +256,7 @@ export const Profile = () => {
             </div>
 
             <div className="animate-fadeIn">
-              {activeTab === 'images' && <MyImagesTab userId={user.id} />}
+              {activeTab === 'images' && <MyImagesTab userId={user.id} onDelete={onImagesChanged} />}
               {activeTab === 'liked' && <LikedImagesTab userId={user.id} />}
               {activeTab === 'stats' && <StatsCards userId={user.id} />}
               {activeTab === 'activity' && <ActivityHeatmap userId={user.id} />}

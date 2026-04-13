@@ -15,9 +15,10 @@ interface MyImage {
 
 interface Props {
   userId: string;
+  onDelete?: () => void;
 }
 
-export const MyImagesTab = ({ userId }: Props) => {
+export const MyImagesTab = ({ userId, onDelete }: Props) => {
   const { theme } = useTheme();
   const { showToast } = useToast();
   const isDark = theme === 'dark';
@@ -63,6 +64,7 @@ export const MyImagesTab = ({ userId }: Props) => {
       const { error } = await supabase.from('generated_images').delete().eq('id', img.id);
       if (error) throw error;
       setImages((prev) => prev.filter((i) => i.id !== img.id));
+      onDelete?.();
       showToast('Image deleted', 'success');
     } catch {
       showToast('Failed to delete image', 'error');

@@ -358,7 +358,7 @@ function App() {
 
       {activeView === 'explore' && <Explore />}
 
-      {activeView === 'profile' && session && <Profile />}
+      {activeView === 'profile' && session && <Profile onImagesChanged={() => setImagesLoaded(false)} />}
 
       {activeView === 'create' && session && (
         <div className="flex flex-col lg:flex-row h-[calc(100vh-64px)]">
