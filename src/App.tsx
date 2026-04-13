@@ -5,6 +5,7 @@ import { useLanguage } from './contexts/LanguageContext';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Explore } from './pages/Explore';
+import { Profile } from './pages/Profile';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Loader2, Download, Sparkles, Share2, Dice5, Globe, Lock, LogOut, User, ChevronDown } from 'lucide-react';
 import { ImageGallery } from './components/ImageGallery';
@@ -48,7 +49,7 @@ function App() {
   const { t } = useLanguage();
   const { showToast } = useToast();
   const [authScreen, setAuthScreen] = useState<'login' | 'signup' | null>(null);
-  const [activeView, setActiveView] = useState<'create' | 'explore'>('explore');
+  const [activeView, setActiveView] = useState<'create' | 'explore' | 'profile'>('explore');
   const [mode, setMode] = useState<'create' | 'edit'>('create');
   const [prompt, setPrompt] = useState('');
   const [images, setImages] = useState<GalleryImage[]>([]);
@@ -314,7 +315,7 @@ function App() {
                       </div>
                       <div className="p-1.5">
                         <button
-                          onClick={() => setProfileMenuOpen(false)}
+                          onClick={() => { setProfileMenuOpen(false); setActiveView('profile'); }}
                           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150
                             ${isDark ? 'text-gray-300 hover:bg-gray-700/60 hover:text-white' : 'text-gray-700 hover:bg-gray-50'}`}
                         >
@@ -356,6 +357,8 @@ function App() {
       </nav>
 
       {activeView === 'explore' && <Explore />}
+
+      {activeView === 'profile' && session && <Profile />}
 
       {activeView === 'create' && session && (
         <div className="flex flex-col lg:flex-row h-[calc(100vh-64px)]">
