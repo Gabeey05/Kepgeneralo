@@ -157,6 +157,10 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
+    if (!supabaseUrl || !serviceRoleKey) {
+      throw new Error(`Missing env vars: SUPABASE_URL=${!!supabaseUrl}, SUPABASE_SERVICE_ROLE_KEY=${!!serviceRoleKey}`);
+    }
+
     let modelEndpoint: string;
     const input: Record<string, unknown> = {
       prompt,
