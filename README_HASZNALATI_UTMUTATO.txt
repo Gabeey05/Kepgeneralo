@@ -20,8 +20,8 @@ Ez egy modern, teljes értékű webalkalmazás, amely a mesterséges intelligenc
 - `supabase/migrations/`: Az adatbázis sémáját és biztonsági szabályait (RLS) definiáló SQL fájlok.
 
 ### Használati útmutató
-1. **Regisztráció/Bejelentkezés:** Az alkalmazás használatához fiók létrehozása szükséges.
-2. **Képgenerálás (Create):** Írjon be egy szöveges leírást (prompt), vagy használja a "Surprise Me" gombot inspirációért.
+1. **Regisztráció/Bejelentkezés:** Az alkalmazás használatához fiók létrehozása szükséges. FONTOS, hogy fogadja el a megerősítő emailet.
+2. **Képgenerálás (Create):** Írjon be egy szöveges leírást kizárólag angolul (prompt), vagy használja a "Surprise Me" gombot inspirációért.
 3. **Képszerkesztés (Edit):** Töltsön fel egy referenciaképet, adjon meg egy módosítási utasítást, és állítsa be az erősséget.
 4. **Közösség:** A "Explore" fül alatt böngészhet mások nyilvános képei között, kedvelheti és letöltheti azokat.
 5. **Profil:** Kövesse nyomon saját generálásait és aktivitási statisztikáit.
@@ -48,8 +48,8 @@ A modern, full-stack web application that leverages Artificial Intelligence (FLU
 - `supabase/migrations/`: SQL files defining database schema and security rules (RLS).
 
 ### Usage Guide
-1. **Sign Up/Login:** Create an account to access the application.
-2. **Image Generation (Create):** Enter a text prompt or use the "Surprise Me" button for inspiration.
+1. **Sign Up/Login:** Create an account to access the application. It's important to confirm your registration via email.
+2. **Image Generation (Create):** Enter a text prompt in only english language or use the "Surprise Me" button for inspiration.
 3. **Image Editing (Edit):** Upload a reference image, provide an edit prompt, and adjust the strength.
 4. **Community:** Browse public images in the "Explore" tab, like them, or download them.
 5. **Profile:** Track your own generations and view activity statistics.
