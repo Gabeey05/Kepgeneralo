@@ -6,6 +6,7 @@ import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Explore } from './pages/Explore';
 import { Profile } from './pages/Profile';
+import { ResetPassword } from './pages/ResetPassword';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Loader2, Download, Sparkles, Share2, Dice5, Globe, Lock, LogOut, User, ChevronDown } from 'lucide-react';
 import { ImageGallery } from './components/ImageGallery';
@@ -44,7 +45,7 @@ interface GalleryImage {
 }
 
 function App() {
-  const { session, loading: authLoading, user, signOut } = useAuth();
+  const { session, loading: authLoading, user, signOut, isPasswordRecovery, clearPasswordRecovery } = useAuth();
   const { theme } = useTheme();
   const { t } = useLanguage();
   const { showToast } = useToast();
@@ -143,6 +144,15 @@ function App() {
       <div className={`min-h-screen ${isDark ? 'bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950' : 'bg-gradient-to-br from-gray-50 via-white to-gray-100'} flex items-center justify-center`}>
         <Sparkles className={`w-8 h-8 animate-spin ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />
       </div>
+    );
+  }
+
+  if (isPasswordRecovery) {
+    return (
+      <>
+        <ResetPassword onDone={() => { clearPasswordRecovery(); setActiveView('explore'); }} />
+        <SettingsPanel />
+      </>
     );
   }
 
